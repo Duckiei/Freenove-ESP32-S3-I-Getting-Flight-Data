@@ -225,7 +225,7 @@ void btn_event_cb(lv_event_t *e)
   float baro_altitude = plane->baro_altitude;
   float velocity = plane->velocity;
 
-  lv_label_set_text(pInfoboxLabel, (callsign + "\n" + origin_country + "\n" + baro_altitude + " m \n" + velocity + " m/s").c_str());
+  lv_label_set_text(pInfoboxLabel, (callsign + "\n" + origin_country + "\n" + baro_altitude * 3.281 + " ft \n" + velocity * 1.944 + " kts").c_str());
 }
 
 lv_obj_t *buildplaneScreen()
