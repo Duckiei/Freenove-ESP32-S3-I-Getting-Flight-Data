@@ -51,15 +51,19 @@ struct Plane
   int category;
 };
 
+lv_obj_t *pPreviousSelectedPlane = nullptr;
+
 // Methods Initialization
 float mapFloat(float start, float fromLow, float fromMax, float toLow, float toMax);
 void btn_event_cb(lv_event_t *e);
 lv_obj_t *buildplaneScreen();
 void buildPlane(Plane &planeData, lv_obj_t *planeScreen);
+lv_obj_t *buildStartupScreen();
 
 void setup()
 {
   screen.init();
+  lv_obj_t *startupScreen = buildStartupScreen();
   Serial.begin(9600);
   delay(1750);
 
@@ -159,8 +163,21 @@ float mapFloat(float start, float fromLow, float fromMax, float toLow, float toM
 
 void btn_event_cb(lv_event_t *e)
 {
-  lv_obj_t *obj = lv_event_get_target(e);
-  Plane *plane = (Plane *)lv_obj_get_user_data(obj);
+  // Get data
+  lv_obj_t *planeObj = lv_event_get_target(e);
+  Plane *plane = (Plane *)lv_obj_get_user_data(planeObj);
+
+  // Colouring highlighted plane
+
+  // Set new plane red
+  lv_obj_set_style_img_recolor(planeObj, lv_color_hex(0x992855), 0);
+  if (pPreviousSelectedPlane != nullptr && pPreviousSelectedPlane != planeObj)
+  {
+    // Set previously selected plane white if its a diffferent plane and its actually something
+    lv_obj_set_style_img_recolor(pPreviousSelectedPlane, lv_color_hex(0xffffff), 0);
+  }
+
+  pPreviousSelectedPlane = planeObj;
   lv_label_set_text(callsign_label, plane->callsign.c_str());
 }
 
@@ -199,7 +216,10 @@ void buildPlane(Plane &planeData, lv_obj_t *planeScreen)
   planes.push_back(*plane);
 }
 
-void buildStartupScreen()
+lv_obj_t *buildStartupScreen()
 {
   lv_obj_t *startupScreen = lv_obj_create(NULL);
+  lv_obj_set_style_bg_color(startupScreen, lv_color_hex(0xffffff), 0);
+  lv_scr_load(startupScreen);
+  return startupScreen;
 }
