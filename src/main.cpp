@@ -54,6 +54,9 @@ struct Plane
   int category;
 };
 
+String token;
+unsigned long expires_at;
+
 lv_obj_t *pPreviousSelectedPlane = nullptr;
 
 // Methods Initialization
@@ -66,6 +69,7 @@ lv_obj_t *buildStartupScreen();
 void setup()
 {
   screen.init();
+  getToken4000();
   lv_obj_t *startupScreen = buildStartupScreen();
   pStartupScreenText = lv_label_create(startupScreen);
   lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
@@ -191,6 +195,11 @@ void setup()
 void loop()
 {
   // put your main code here, to run repeatedly:
+  if (millis() / 1000 == expires_at)
+  {
+    getToken4000();
+  }
+
   screen.routine();
   delay(5);
 }
@@ -238,7 +247,7 @@ lv_obj_t *buildplaneScreen()
   lv_obj_align_to(infoBox, planeScreen, LV_ALIGN_TOP_LEFT, 20, 20);
   lv_obj_set_style_bg_color(infoBox, lv_color_hex(0x000000), 0);
   lv_obj_set_style_opa(infoBox, LV_OPA_50, 0);
-  lv_obj_set_size(infoBox, 100, 90);
+  lv_obj_set_size(infoBox, 200, 90);
 
   // Infobox Text
   pInfoboxLabel = lv_label_create(planeScreen);
@@ -249,6 +258,10 @@ lv_obj_t *buildplaneScreen()
   lv_scr_load(planeScreen);
 
   lv_obj_clear_flag(planeScreen, LV_OBJ_FLAG_SCROLLABLE);
+
+  // lv_obj_t *pDiagnosticButton = lv_btn_create(lv_scr_act());
+  // lv_obj_align_to(pDiagnosticButton, lv_scr_act(), LV_ALIGN_TOP_RIGHT, -20, 20);
+  // lv_obj_add_event_cb(pDiagnosticButton, );
 
   return planeScreen; // return the actual pointer, no dereference
 }
@@ -279,4 +292,47 @@ lv_obj_t *buildStartupScreen()
   lv_obj_set_style_bg_color(startupScreen, lv_color_hex(0xffffff), 0);
   lv_scr_load(startupScreen);
   return startupScreen;
+}
+
+void getToken4000()
+{
+  String clientID = opensky_clientId;
+  String clientSecret = opensky_clientSecret;
+
+  WiFiClientSecure client;
+  HTTPClient https;
+  JsonDocument doc;
+
+  // Build HTTPS Url
+  client.setInsecure();
+  String url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token";
+  // Check if connection to url can be made
+  if (https.begin(client, url))
+  {
+    // Retrieve response code & print it
+    https.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+    String d_Part = "grant_type=client_credentials";
+    d_Part += "&client_id=" + clientID;
+    d_Part += "client_secret=" + clientSecret;
+
+    int httpCode = https.POST(d_Part);
+
+    Serial.printf("Token request HTTP code: %d\n", httpCode);
+
+    // Validate connection can even be made
+    // Validate connection is proper
+    if (httpCode == HTTP_CODE_OK)
+    {
+      String payload = https.getString();
+
+      deserializeJson(doc, payload);
+
+      token = doc["access_token"].as<String>();
+      unsigned long expires_in = doc["expires_in"] | 1800;
+
+      expires_at = millis() / 1000 + expires_in;
+      expires_at = expires_at - 30;
+    }
+  }
 }
