@@ -32,6 +32,8 @@ std::vector<lv_obj_t> planes;
 
 // Object initialization
 lv_obj_t *callsign_label;
+lv_obj_t *pStartupScreenText;
+String startupScreenText = "";
 
 // LVGL --> Display wrapper
 Display screen;
@@ -64,18 +66,35 @@ void setup()
 {
   screen.init();
   lv_obj_t *startupScreen = buildStartupScreen();
+  pStartupScreenText = lv_label_create(startupScreen);
+  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+  lv_obj_align_to(pStartupScreenText, startupScreen, LV_ALIGN_TOP_MID, -90, 20);
+  lv_obj_set_style_text_font(pStartupScreenText, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(pStartupScreenText, lv_color_hex(0x000000), 0);
+  screen.routine();
   Serial.begin(9600);
   delay(1750);
 
-  lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x181a26), 0);
-
   // Connect to Wifi
   Serial.println("Connecting WiFi...");
+
+  startupScreenText += "Connecting WiFi...";
+  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+  screen.routine();
+
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(5);
   }
+
+  startupScreenText += "\nWifi Connected!";
+  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+  screen.routine();
+
+  startupScreenText += "Local IP --> " + WiFi.localIP().toString();
+  screen.routine();
+
   Serial.println(WiFi.localIP());
 
   // Handle encryption
@@ -91,6 +110,10 @@ void setup()
   url += "&lomax=" + String(lomax);
   Serial.println(url);
 
+  startupScreenText += "\nAttempting to reach API";
+  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+  screen.routine();
+
   // Check if connection to url can be made
   if (https.begin(client, url))
   {
@@ -98,12 +121,20 @@ void setup()
     int httpCode = https.GET();
     Serial.printf("Http Code: %d \n", httpCode);
 
+    startupScreenText += "\nHTTP Code --> " + httpCode;
+    lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+    screen.routine();
+
     // Validate connection can even be made
     if (httpCode > 0)
     {
       // Validate connection is proper
       if (httpCode == HTTP_CODE_OK)
       {
+        startupScreenText += "\nSuccesfully Accessed API!... ";
+        lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+        screen.routine();
+
         JsonDocument doc;
 
         // Retrieve JSON & parse it
@@ -112,6 +143,12 @@ void setup()
 
         // Explicitly convert json into accessible array
         JsonArray planeStates = doc["states"].as<JsonArray>();
+
+        startupScreenText += "\nRetrieving flight data... ";
+        lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+        screen.routine();
+
+        delay(3000);
 
         lv_obj_t *planeScreen = buildplaneScreen();
 
@@ -143,6 +180,9 @@ void setup()
   else
   {
     Serial.println("Failed to connect");
+    startupScreenText += "\nUnable to reach URL...\nPlease reset. ";
+    lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+    screen.routine();
   }
   https.end();
 }
@@ -181,10 +221,11 @@ void btn_event_cb(lv_event_t *e)
   lv_label_set_text(callsign_label, plane->callsign.c_str());
 }
 
-lv_obj_t *buildplaneScreen() // return a pointer
+lv_obj_t *buildplaneScreen()
 {
   lv_obj_t *planeScreen = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(planeScreen, lv_color_hex(0x181a26), 0);
+  screen.routine();
 
   callsign_label = lv_label_create(planeScreen);
   lv_label_set_text(callsign_label, "Callsign: ");
