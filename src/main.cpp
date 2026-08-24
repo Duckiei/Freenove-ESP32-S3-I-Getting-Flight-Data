@@ -248,6 +248,8 @@ lv_obj_t *buildplaneScreen()
   lv_obj_set_style_text_font(pInfoboxLabel, &lv_font_montserrat_14, 0);
   lv_scr_load(planeScreen);
 
+  lv_obj_clear_flag(planeScreen, LV_OBJ_FLAG_SCROLLABLE);
+
   return planeScreen; // return the actual pointer, no dereference
 }
 
