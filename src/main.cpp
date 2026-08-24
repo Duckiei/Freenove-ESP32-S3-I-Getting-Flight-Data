@@ -10,7 +10,7 @@
 #include <Plane_Icon_30x30px_TrueColourAlpha.h>
 #include "tokens.h"
 #include <Esp.h>
-#include <mapbox_static_480x320.h>
+#include <mapbox_static_480x320_markers.h>
 
 //=========Initialization =========\\
 
@@ -93,7 +93,7 @@ void setup()
   lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
   screen.routine();
 
-  startupScreenText += "Local IP --> " + WiFi.localIP().toString();
+  startupScreenText += "\nLocal IP --> " + WiFi.localIP().toString();
   screen.routine();
 
   Serial.println(WiFi.localIP());
@@ -169,7 +169,7 @@ void setup()
           plane.vertical_rate = planeState[11];
           plane.category = planeState[17];
 
-          if (!plane.on_ground && (plane.category <= 7 && plane.category >= 2))
+          if (!plane.on_ground)
           {
             buildPlane(plane, planeScreen);
           }
@@ -210,8 +210,8 @@ void btn_event_cb(lv_event_t *e)
 
   // Colouring highlighted plane
 
-  // Set new plane red
-  lv_obj_set_style_img_recolor(planeObj, lv_color_hex(0x992855), 0);
+  // Set new plane colour
+  lv_obj_set_style_img_recolor(planeObj, lv_color_hex(0xffe100), 0);
   if (pPreviousSelectedPlane != nullptr && pPreviousSelectedPlane != planeObj)
   {
     // Set previously selected plane white if its a diffferent plane and its actually something
@@ -231,7 +231,7 @@ void btn_event_cb(lv_event_t *e)
 lv_obj_t *buildplaneScreen()
 {
   lv_obj_t *planeScreen = lv_obj_create(NULL);
-  lv_obj_set_style_bg_img_src(planeScreen, &mapbox_static_480x320, 0);
+  lv_obj_set_style_bg_img_src(planeScreen, &mapbox_static_480x320_markers, 0);
 
   // Infobox
   lv_obj_t *infoBox = lv_obj_create(planeScreen);
