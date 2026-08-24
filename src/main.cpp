@@ -10,6 +10,7 @@
 #include <Plane_Icon_30x30px_TrueColourAlpha.h>
 #include "tokens.h"
 #include <Esp.h>
+#include <mapbox_static_480x320.h>
 
 //=========Initialization =========\\
 
@@ -31,7 +32,7 @@ const int SCREEN_HEIGHT = 320;
 std::vector<lv_obj_t> planes;
 
 // Object initialization
-lv_obj_t *callsign_label;
+lv_obj_t *pInfoboxLabel;
 lv_obj_t *pStartupScreenText;
 String startupScreenText = "";
 
@@ -168,7 +169,7 @@ void setup()
           plane.vertical_rate = planeState[11];
           plane.category = planeState[17];
 
-          if (!plane.on_ground)
+          if (!plane.on_ground && (plane.category <= 7 && plane.category >= 2))
           {
             buildPlane(plane, planeScreen);
           }
@@ -218,20 +219,33 @@ void btn_event_cb(lv_event_t *e)
   }
 
   pPreviousSelectedPlane = planeObj;
-  lv_label_set_text(callsign_label, plane->callsign.c_str());
+
+  String callsign = plane->callsign;
+  String origin_country = plane->origin_country;
+  float baro_altitude = plane->baro_altitude;
+  float velocity = plane->velocity;
+
+  lv_label_set_text(pInfoboxLabel, (callsign + "\n" + origin_country + "\n" + baro_altitude + " m \n" + velocity + " m/s").c_str());
 }
 
 lv_obj_t *buildplaneScreen()
 {
   lv_obj_t *planeScreen = lv_obj_create(NULL);
-  lv_obj_set_style_bg_color(planeScreen, lv_color_hex(0x181a26), 0);
-  screen.routine();
+  lv_obj_set_style_bg_img_src(planeScreen, &mapbox_static_480x320, 0);
 
-  callsign_label = lv_label_create(planeScreen);
-  lv_label_set_text(callsign_label, "Callsign: ");
-  lv_obj_align_to(callsign_label, planeScreen, LV_ALIGN_TOP_LEFT, 20, 20);
-  lv_obj_set_style_text_color(callsign_label, lv_color_hex(0xffffff), 0);
-  lv_obj_set_style_text_font(callsign_label, &lv_font_montserrat_20, 0);
+  // Infobox
+  lv_obj_t *infoBox = lv_obj_create(planeScreen);
+  lv_obj_align_to(infoBox, planeScreen, LV_ALIGN_TOP_LEFT, 20, 20);
+  lv_obj_set_style_bg_color(infoBox, lv_color_hex(0x000000), 0);
+  lv_obj_set_style_opa(infoBox, LV_OPA_50, 0);
+  lv_obj_set_size(infoBox, 100, 90);
+
+  // Infobox Text
+  pInfoboxLabel = lv_label_create(planeScreen);
+  lv_label_set_text(pInfoboxLabel, "Select a \nplane for \ndata: ");
+  lv_obj_align_to(pInfoboxLabel, planeScreen, LV_ALIGN_TOP_LEFT, 30, 30);
+  lv_obj_set_style_text_color(pInfoboxLabel, lv_color_hex(0xffffff), 0);
+  lv_obj_set_style_text_font(pInfoboxLabel, &lv_font_montserrat_14, 0);
   lv_scr_load(planeScreen);
 
   return planeScreen; // return the actual pointer, no dereference
