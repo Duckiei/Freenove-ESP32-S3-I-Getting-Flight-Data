@@ -67,8 +67,9 @@ lv_obj_t *buildplaneScreen();
 void buildPlane(Plane &planeData, lv_obj_t *planeScreen);
 lv_obj_t *buildStartupScreen();
 void getToken4000();
-void drawPlanestoScreen();
+void drawPlanestoScreen(lv_obj_t *planeScreen);
 
+lv_obj_t *planeScreen = nullptr;
 void setup()
 {
   // Startup
@@ -106,7 +107,9 @@ void setup()
 
   delay(2000);
   getToken4000();
-  drawPlanestoScreen();
+  planeScreen = buildplaneScreen();
+  drawPlanestoScreen(planeScreen);
+  lv_scr_load(planeScreen);
 }
 
 void loop()
@@ -119,7 +122,7 @@ void loop()
 
   if (millis() / 1000 == whenUpdateScreen)
   {
-    drawPlanestoScreen();
+    drawPlanestoScreen(planeScreen);
   }
   screen.routine();
   delay(5);
@@ -192,7 +195,6 @@ lv_obj_t *buildplaneScreen()
   lv_obj_align_to(pInfoboxLabel, planeScreen, LV_ALIGN_TOP_LEFT, 30, 30);
   lv_obj_set_style_text_color(pInfoboxLabel, lv_color_hex(0xffffff), 0);
   lv_obj_set_style_text_font(pInfoboxLabel, &lv_font_montserrat_14, 0);
-  lv_scr_load(planeScreen);
 
   lv_obj_clear_flag(planeScreen, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -275,14 +277,15 @@ void getToken4000()
       expires_at = expires_at - 30;
     }
   }
+  doc.clear();
+  https.end();
   Serial.println(token);
   Serial.println(expires_in);
   Serial.println(expires_at);
 }
 
-void drawPlanestoScreen()
+void drawPlanestoScreen(lv_obj_t *planeScreen)
 {
-  lv_obj_t *planeScreen = buildplaneScreen();
 
   // Handle encryption
   WiFiClientSecure client;
@@ -315,6 +318,7 @@ void drawPlanestoScreen()
       lv_obj_del(object);
     }
 
+    planes.clear();
     for (JsonArray planeState : planeStates)
     {
       Plane plane;
@@ -338,5 +342,6 @@ void drawPlanestoScreen()
   }
   whenUpdateScreen = millis() / 1000 + 30;
   pPreviousSelectedPlane = nullptr;
+  doc.clear();
   https.end();
 }
