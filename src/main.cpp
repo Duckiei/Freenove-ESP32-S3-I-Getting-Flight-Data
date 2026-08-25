@@ -29,7 +29,7 @@ const int SCREEN_WIDTH = 480;
 const int SCREEN_HEIGHT = 320;
 
 // Hold all plane obj's
-std::vector<lv_obj_t> planes;
+std::vector<lv_obj_t *> planes;
 
 // Object initialization
 lv_obj_t *pInfoboxLabel;
@@ -56,6 +56,7 @@ struct Plane
 
 String token;
 unsigned long expires_at;
+unsigned long whenUpdateScreen;
 
 lv_obj_t *pPreviousSelectedPlane = nullptr;
 
@@ -65,11 +66,13 @@ void btn_event_cb(lv_event_t *e);
 lv_obj_t *buildplaneScreen();
 void buildPlane(Plane &planeData, lv_obj_t *planeScreen);
 lv_obj_t *buildStartupScreen();
+void getToken4000();
+void drawPlanestoScreen();
 
 void setup()
 {
+  // Startup
   screen.init();
-  getToken4000();
   lv_obj_t *startupScreen = buildStartupScreen();
   pStartupScreenText = lv_label_create(startupScreen);
   lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
@@ -98,98 +101,12 @@ void setup()
   screen.routine();
 
   startupScreenText += "\nLocal IP --> " + WiFi.localIP().toString();
-  screen.routine();
-
-  Serial.println(WiFi.localIP());
-
-  // Handle encryption
-  WiFiClientSecure client;
-  client.setInsecure();
-
-  // Build HTTPS Url
-  HTTPClient https;
-  String url = "https://opensky-network.org/api/states/all?";
-  url += "lamin=" + String(lamin);
-  url += "&lomin=" + String(lomin);
-  url += "&lamax=" + String(lamax);
-  url += "&lomax=" + String(lomax);
-  Serial.println(url);
-
-  startupScreenText += "\nAttempting to reach API";
   lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
   screen.routine();
 
-  // Check if connection to url can be made
-  if (https.begin(client, url))
-  {
-    // Retrieve response code & print it
-    int httpCode = https.GET();
-    Serial.printf("Http Code: %d \n", httpCode);
-
-    startupScreenText += "\nHTTP Code --> " + httpCode;
-    lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
-    screen.routine();
-
-    // Validate connection can even be made
-    if (httpCode > 0)
-    {
-      // Validate connection is proper
-      if (httpCode == HTTP_CODE_OK)
-      {
-        startupScreenText += "\nSuccesfully Accessed API!... ";
-        lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
-        screen.routine();
-
-        JsonDocument doc;
-
-        // Retrieve JSON & parse it
-        String payload = https.getString();
-        deserializeJson(doc, payload);
-
-        // Explicitly convert json into accessible array
-        JsonArray planeStates = doc["states"].as<JsonArray>();
-
-        startupScreenText += "\nRetrieving flight data... ";
-        lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
-        screen.routine();
-
-        delay(3000);
-
-        lv_obj_t *planeScreen = buildplaneScreen();
-
-        // Create all plane objects
-        for (JsonArray planeState : planeStates)
-        {
-          Plane plane;
-
-          plane.callsign = planeState[1].as<String>();
-          plane.origin_country = planeState[2].as<String>();
-          plane.longitude = planeState[5];
-          plane.latitude = planeState[6];
-          plane.baro_altitude = planeState[7];
-          plane.on_ground = planeState[8];
-          plane.velocity = planeState[9];
-          plane.heading = planeState[10];
-          plane.vertical_rate = planeState[11];
-          plane.category = planeState[17];
-
-          if (!plane.on_ground)
-          {
-            buildPlane(plane, planeScreen);
-          }
-        }
-      }
-      Serial.println("Finished printing values.");
-    }
-  }
-  else
-  {
-    Serial.println("Failed to connect");
-    startupScreenText += "\nUnable to reach URL...\nPlease reset. ";
-    lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
-    screen.routine();
-  }
-  https.end();
+  delay(2000);
+  getToken4000();
+  drawPlanestoScreen();
 }
 
 void loop()
@@ -200,11 +117,31 @@ void loop()
     getToken4000();
   }
 
+  if (millis() / 1000 == whenUpdateScreen)
+  {
+    drawPlanestoScreen();
+  }
   screen.routine();
   delay(5);
 }
-
-//========= FUNCTIONS / METHODS =========\\
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//===============================================================================
+//============================= FUNCTIONS / METHODS =============================
+//===============================================================================
 
 float mapFloat(float start, float fromLow, float fromMax, float toLow, float toMax)
 {
@@ -283,7 +220,7 @@ void buildPlane(Plane &planeData, lv_obj_t *planeScreen)
   Plane *planeCopy = new Plane(planeData); // heap-allocated copy of the whole struct
   lv_obj_set_user_data(plane, planeCopy);
   lv_obj_add_event_cb(plane, btn_event_cb, LV_EVENT_CLICKED, NULL);
-  planes.push_back(*plane);
+  planes.push_back(plane);
 }
 
 lv_obj_t *buildStartupScreen()
@@ -302,6 +239,9 @@ void getToken4000()
   WiFiClientSecure client;
   HTTPClient https;
   JsonDocument doc;
+  Serial.begin(9600);
+  delay(1750);
+  unsigned long expires_in;
 
   // Build HTTPS Url
   client.setInsecure();
@@ -314,7 +254,7 @@ void getToken4000()
 
     String d_Part = "grant_type=client_credentials";
     d_Part += "&client_id=" + clientID;
-    d_Part += "client_secret=" + clientSecret;
+    d_Part += "&client_secret=" + clientSecret;
 
     int httpCode = https.POST(d_Part);
 
@@ -329,10 +269,74 @@ void getToken4000()
       deserializeJson(doc, payload);
 
       token = doc["access_token"].as<String>();
-      unsigned long expires_in = doc["expires_in"] | 1800;
+      expires_in = doc["expires_in"] | 1800;
 
       expires_at = millis() / 1000 + expires_in;
       expires_at = expires_at - 30;
     }
   }
+  Serial.println(token);
+  Serial.println(expires_in);
+  Serial.println(expires_at);
+}
+
+void drawPlanestoScreen()
+{
+  lv_obj_t *planeScreen = buildplaneScreen();
+
+  // Handle encryption
+  WiFiClientSecure client;
+  HTTPClient https;
+  JsonDocument doc;
+  client.setInsecure();
+
+  String url = "https://opensky-network.org/api/states/all?";
+  url += "lamin=" + String(lamin);
+  url += "&lomin=" + String(lomin);
+  url += "&lamax=" + String(lamax);
+  url += "&lomax=" + String(lomax);
+
+  https.begin(client, url);
+  https.addHeader("Authorization", "Bearer " + token);
+  int httpCode = https.GET();
+
+  // Validate connection is proper
+  if (httpCode == HTTP_CODE_OK)
+  {
+    // Retrieve JSON & parse it
+    String payload = https.getString();
+    deserializeJson(doc, payload);
+
+    JsonArray planeStates = doc["states"].as<JsonArray>();
+
+    // clear previous planes
+    for (lv_obj_t *object : planes)
+    {
+      lv_obj_del(object);
+    }
+
+    for (JsonArray planeState : planeStates)
+    {
+      Plane plane;
+
+      plane.callsign = planeState[1].as<String>();
+      plane.origin_country = planeState[2].as<String>();
+      plane.longitude = planeState[5];
+      plane.latitude = planeState[6];
+      plane.baro_altitude = planeState[7];
+      plane.on_ground = planeState[8];
+      plane.velocity = planeState[9];
+      plane.heading = planeState[10];
+      plane.vertical_rate = planeState[11];
+      plane.category = planeState[17];
+
+      if (!plane.on_ground)
+      {
+        buildPlane(plane, planeScreen);
+      }
+    }
+  }
+  whenUpdateScreen = millis() / 1000 + 30;
+  pPreviousSelectedPlane = nullptr;
+  https.end();
 }
