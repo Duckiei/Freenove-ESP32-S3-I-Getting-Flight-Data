@@ -8,6 +8,7 @@
 #include <ArduinoJson.h>
 #include <display.h>
 #include <vector>
+#include <unordered_map>
 #include <Plane_Icon_30x30px_TrueColourAlpha.h>
 #include "tokens.h"
 #include <Esp.h>
@@ -38,7 +39,10 @@ lv_obj_t *pInfoboxLabel;
 lv_obj_t *pStartupScreenText;
 String startupScreenText = "";
 lv_obj_t *planeScreen = nullptr;
+lv_obj_t *settingsScreen = nullptr;
 lv_obj_t *pPreviousSelectedPlane = nullptr;
+
+lv_obj_t *text;
 
 // LVGL --> Display wrapper
 Display screen;
@@ -81,6 +85,7 @@ const int infoBoxTextColour = WHITE;
 const int arrowButtonsColour = BLACK;
 
 bool isLight = true;
+bool lookingAtDiagnosticScreen = false;
 
 // Methods Initialization
 float mapFloat(float start, float fromLow, float fromMax, float toLow, float toMax);
@@ -98,11 +103,6 @@ void setup()
   screen.init();
   lv_obj_t *startupScreen = buildStartupScreen();
   lv_scr_load(startupScreen);
-  pStartupScreenText = lv_label_create(startupScreen);
-  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
-  lv_obj_align_to(pStartupScreenText, startupScreen, LV_ALIGN_TOP_MID, -90, 20);
-  lv_obj_set_style_text_font(pStartupScreenText, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(pStartupScreenText, lv_color_hex(startupScreenTextColour), 0);
   screen.routine();
   Serial.begin(9600);
   delay(1750);
@@ -130,6 +130,7 @@ void setup()
 
   delay(2000);
   getToken4000();
+  settingsScreen = buildSettingsScreen();
   planeScreen = buildplaneScreen();
   drawPlanestoScreen(planeScreen);
   lv_scr_load(planeScreen);
@@ -219,6 +220,43 @@ void toggleViewMode(lv_event_t *e)
   isLight = !isLight;
 }
 
+void refreshDiagnostics(lv_event_t *e)
+{
+  std::unordered_map<int, String> wifiCodes;
+  wifiCodes[0] = "Idle";
+  wifiCodes[1] = "Network not found";
+  wifiCodes[3] = "Connected";
+  wifiCodes[4] = "Connection failed";
+  wifiCodes[6] = "Disconnected";
+
+  String stats = "";
+  stats += "RAM";
+  stats += "\n\t\t Total Heap (KB): " + String(ESP.getHeapSize() / 1000);
+  stats += "\n\t\t Used Heap (KB): " + String((ESP.getHeapSize() - ESP.getFreeHeap()) / 1000);
+  stats += "\n\n WiFi";
+  stats += "\n\t\t Status: " + wifiCodes[WiFi.status()];
+  stats += "\n\t\t IP: " + WiFi.localIP().toString();
+  stats += "\n\t\t RSSI: " + String(WiFi.RSSI());
+  stats += "\n\n Miscellaneous.";
+  stats += "\n\t\t Runtime (Seconds): " + String(millis() / 1000);
+
+  lv_label_set_text(text, stats.c_str());
+}
+
+void seeDiagnosticScreen(lv_event_t *e)
+{
+  if (lookingAtDiagnosticScreen)
+  {
+    lv_scr_load(planeScreen);
+  }
+  else
+  {
+    refreshDiagnostics(e);
+    lv_scr_load(settingsScreen);
+  }
+  lookingAtDiagnosticScreen = !lookingAtDiagnosticScreen;
+}
+
 lv_obj_t *buildplaneScreen()
 {
   // Screen itself
@@ -268,6 +306,7 @@ lv_obj_t *buildplaneScreen()
   lv_obj_set_style_text_color(leftArrowLabel, lv_color_hex(WHITE), 0);
 
   lv_obj_add_event_cb(pLeftArrow, toggleViewMode, LV_EVENT_CLICKED, NULL);
+  lv_obj_add_event_cb(pRightArrow, seeDiagnosticScreen, LV_EVENT_CLICKED, NULL);
 
   return planeScreen;
 }
@@ -296,6 +335,13 @@ lv_obj_t *buildStartupScreen()
 {
   lv_obj_t *startupScreen = lv_obj_create(NULL);
   lv_obj_set_style_bg_color(startupScreen, lv_color_hex(startupScreenColour), 0);
+
+  pStartupScreenText = lv_label_create(startupScreen);
+  lv_label_set_text(pStartupScreenText, startupScreenText.c_str());
+  lv_obj_align_to(pStartupScreenText, startupScreen, LV_ALIGN_TOP_MID, -90, 20);
+  lv_obj_set_style_text_font(pStartupScreenText, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(pStartupScreenText, lv_color_hex(startupScreenTextColour), 0);
+
   return startupScreen;
 }
 
@@ -418,18 +464,59 @@ void drawPlanestoScreen(lv_obj_t *planeScreen)
 
 lv_obj_t *buildSettingsScreen()
 {
-  lv_obj_t *screen = lv_obj_create(NULL);
-  // Update all this when the panel is switched to, and when refresh button is pressed
+  lv_obj_t *diagnosticScreen = lv_obj_create(NULL);
+  lv_obj_set_style_bg_color(diagnosticScreen, lv_color_hex(DARK_GREY), 0);
 
-  // free heap
+  lv_obj_t *diagnosticTitle = lv_label_create(diagnosticScreen);
+  lv_obj_set_style_text_font(diagnosticTitle, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(diagnosticTitle, lv_color_hex(WHITE), 0);
+  lv_label_set_text(diagnosticTitle, "Diagnostics...");
+  lv_obj_align(diagnosticTitle, LV_ALIGN_TOP_LEFT, 60, 30);
 
-  // Wifi status, ip rssi
+  // Make back arrow button
+  lv_obj_t *backArrowButton = lv_btn_create(diagnosticScreen);
+  lv_obj_align(backArrowButton, LV_ALIGN_TOP_LEFT, 10, 20);
+  lv_obj_set_size(backArrowButton, 40, 40);
+  lv_obj_set_style_bg_color(backArrowButton, lv_color_hex(BLACK), 0);
+  lv_obj_set_style_bg_opa(backArrowButton, LV_OPA_50, 0);
+  lv_obj_add_event_cb(backArrowButton, seeDiagnosticScreen, LV_EVENT_CLICKED, NULL);
 
-  // api calls remaining
+  // Text in back arrow
+  lv_obj_t *backArrowText = lv_label_create(backArrowButton);
+  lv_obj_set_style_text_font(backArrowText, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(backArrowText, lv_color_hex(WHITE), 0);
+  lv_label_set_text(backArrowText, LV_SYMBOL_LEFT);
+  lv_obj_align(backArrowText, LV_ALIGN_CENTER, 0, 0);
 
-  // uptime (update millis label when the button is pressed)
+  // Refresh button
+  lv_obj_t *refreshButton = lv_btn_create(diagnosticScreen);
+  lv_obj_align(refreshButton, LV_ALIGN_TOP_RIGHT, -10, 20);
+  lv_obj_set_size(refreshButton, 40, 40);
+  lv_obj_set_style_bg_color(refreshButton, lv_color_hex(BLACK), 0);
+  lv_obj_set_style_bg_opa(refreshButton, LV_OPA_50, 0);
+  lv_obj_add_event_cb(refreshButton, refreshDiagnostics, LV_EVENT_CLICKED, NULL);
 
-  // flash space
+  // Text in back arrow
+  lv_obj_t *refreshText = lv_label_create(refreshButton);
+  lv_obj_set_style_text_font(refreshText, &lv_font_montserrat_20, 0);
+  lv_obj_set_style_text_color(refreshText, lv_color_hex(WHITE), 0);
+  lv_label_set_text(refreshText, LV_SYMBOL_REFRESH);
+  lv_obj_align(refreshText, LV_ALIGN_CENTER, 0, 0);
 
-  return screen;
+  // Square at bottom
+
+  lv_obj_t *backgroundSquare = lv_obj_create(diagnosticScreen);
+  lv_obj_set_size(backgroundSquare, 460, 240);
+  lv_obj_align(backgroundSquare, LV_ALIGN_BOTTOM_LEFT, 10, -10);
+  lv_obj_set_style_bg_color(backgroundSquare, lv_color_hex(BLACK), 0);
+  lv_obj_set_style_bg_opa(backgroundSquare, LV_OPA_20, 0);
+
+  // Left side text
+  text = lv_label_create(backgroundSquare);
+  lv_obj_set_style_text_font(text, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(text, lv_color_hex(WHITE), 0);
+  lv_obj_align(text, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  // Return
+  return diagnosticScreen;
 }
