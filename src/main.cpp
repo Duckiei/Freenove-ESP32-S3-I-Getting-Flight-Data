@@ -430,6 +430,8 @@ void drawPlanestoScreen(lv_obj_t *planeScreen)
     // clear previous planes
     for (lv_obj_t *object : planes)
     {
+      Plane *structData = (Plane *)lv_obj_get_user_data(object);
+      delete (structData);
       lv_obj_del(object);
     }
 
