@@ -9,11 +9,22 @@
 #include <display.h>
 #include <vector>
 #include <unordered_map>
-#include <Plane_Icon_30x30px_TrueColourAlpha.h>
 #include "tokens.h"
 #include <Esp.h>
-#include <mapbox_static_480x320_markers.h>
-#include <mapbox_static_480x320_Dark.h>
+
+#include <Map_backgrounds\mapbox_static_480x320_markers.h>
+#include <Map_backgrounds\mapbox_static_480x320_Dark.h>
+
+#include <Icons\Plane_Icon_30x30px_TrueColourAlpha.h>
+#include <Icons\helicopter_icon_30x30.h>
+
+#include <Airline_logos\air_canada.h>
+#include <Airline_logos\air_canada_jazz.h>
+#include <Airline_logos\air_canada_rouge.h>
+#include <Airline_logos\westjet.h>
+#include <Airline_logos\delta_airlines.h>
+#include <Airline_logos\american_airlines.h>
+#include <Airline_logos\cathay_pacific.h>
 
 //=========Initialization =========\\
 
@@ -46,6 +57,8 @@ lv_obj_t *text;
 
 // LVGL --> Display wrapper
 Display screen;
+
+lv_obj_t *imgHolder;
 
 // Struct
 struct Plane
@@ -86,6 +99,8 @@ const int arrowButtonsColour = BLACK;
 
 bool isLight = true;
 bool lookingAtDiagnosticScreen = false;
+
+String apiRequestsRemaining;
 
 // Methods Initialization
 float mapFloat(float start, float fromLow, float fromMax, float toLow, float toMax);
@@ -182,6 +197,17 @@ void user_select_plane(lv_event_t *e)
   lv_obj_t *planeObj = lv_event_get_target(e);
   Plane *plane = (Plane *)lv_obj_get_user_data(planeObj);
 
+  std::unordered_map<std::string, const lv_img_dsc_t *> mapLogos;
+  mapLogos[std::string("ACA")] = &air_canada;
+  mapLogos[std::string("AAL")] = &american_airlines;
+  mapLogos[std::string("DAL")] = &delta_airlines;
+  mapLogos[std::string("WJA")] = &westjet;
+  mapLogos[std::string("JZA")] = &air_canada_jazz;
+  mapLogos[std::string("ROU")] = &air_canada_rouge;
+  mapLogos[std::string("CPA")] = &cathay_pacific;
+
+  // looking up with an Arduino String key, convert it first:
+
   // Colouring highlighted plane
 
   // Set new plane colour
@@ -198,6 +224,10 @@ void user_select_plane(lv_event_t *e)
   String origin_country = plane->origin_country;
   float baro_altitude = plane->baro_altitude;
   float velocity = plane->velocity;
+
+  std::string prefix = plane->callsign.substring(0, 3).c_str();
+
+  lv_obj_set_style_bg_img_src(imgHolder, mapLogos[prefix], 0);
 
   lv_label_set_text(pInfoboxLabel, (callsign + "\n" + origin_country + "\n" + baro_altitude * 3.281 + " ft \n" + velocity * 1.944 + " kts").c_str());
 }
@@ -239,6 +269,7 @@ void refreshDiagnostics(lv_event_t *e)
   stats += "\n\t\t RSSI: " + String(WiFi.RSSI());
   stats += "\n\n Miscellaneous.";
   stats += "\n\t\t Runtime (Seconds): " + String(millis() / 1000);
+  stats += "\n\t\t Requests Remaining: " + apiRequestsRemaining;
 
   lv_label_set_text(text, stats.c_str());
 }
@@ -268,8 +299,9 @@ lv_obj_t *buildplaneScreen()
   lv_obj_t *infoBox = lv_obj_create(planeScreen);
   lv_obj_align_to(infoBox, planeScreen, LV_ALIGN_TOP_LEFT, 20, 20);
   lv_obj_set_style_bg_color(infoBox, lv_color_hex(infoBoxColour), 0);
-  lv_obj_set_style_opa(infoBox, LV_OPA_50, 0);
+  lv_obj_set_style_bg_opa(infoBox, LV_OPA_50, 0);
   lv_obj_set_size(infoBox, 200, 90);
+  lv_obj_clear_flag(infoBox, LV_OBJ_FLAG_SCROLLABLE);
 
   // Infobox Text
   pInfoboxLabel = lv_label_create(planeScreen);
@@ -308,13 +340,19 @@ lv_obj_t *buildplaneScreen()
   lv_obj_add_event_cb(pLeftArrow, toggleViewMode, LV_EVENT_CLICKED, NULL);
   lv_obj_add_event_cb(pRightArrow, seeDiagnosticScreen, LV_EVENT_CLICKED, NULL);
 
+  imgHolder = lv_obj_create(infoBox);
+  lv_obj_set_size(imgHolder, 70, 70);
+  lv_obj_set_style_bg_opa(imgHolder, LV_OPA_COVER, 0);
+  lv_obj_set_style_bg_color(imgHolder, lv_color_hex(WHITE), 0);
+  lv_obj_align(imgHolder, LV_ALIGN_TOP_RIGHT, 0, -10);
+
   return planeScreen;
 }
 
 void buildPlane(Plane &planeData, lv_obj_t *planeScreen)
 {
   lv_obj_t *plane = lv_img_create(planeScreen);
-  lv_img_set_src(plane, &Plane_Icon_30x30px);
+  lv_img_set_src(plane, (planeData.category == 8) ? &helicopter_icon_30x30 : &Plane_Icon_30x30px);
   lv_obj_add_flag(plane, LV_OBJ_FLAG_CLICKABLE);
 
   float lat_mapped = mapFloat(planeData.latitude, lamin, lamax, SCREEN_HEIGHT, 0);
@@ -329,6 +367,9 @@ void buildPlane(Plane &planeData, lv_obj_t *planeScreen)
   lv_obj_set_user_data(plane, planeCopy);
   lv_obj_add_event_cb(plane, user_select_plane, LV_EVENT_CLICKED, NULL);
   planes.push_back(plane);
+  Serial.print(planeData.callsign);
+  Serial.print(": ");
+  Serial.println(planeData.category);
 }
 
 lv_obj_t *buildStartupScreen()
@@ -410,6 +451,7 @@ void drawPlanestoScreen(lv_obj_t *planeScreen)
   url += "&lomin=" + String(lomin);
   url += "&lamax=" + String(lamax);
   url += "&lomax=" + String(lomax);
+  url += "&extended=1";
 
   https.begin(client, url);
   https.addHeader("Authorization", "Bearer " + token);
@@ -421,7 +463,7 @@ void drawPlanestoScreen(lv_obj_t *planeScreen)
   if (httpCode == HTTP_CODE_OK)
   {
     // Retrieve JSON & parse it
-    String rateLimitRemaining = https.header("X-Rate-Limit-Remaining");
+    apiRequestsRemaining = https.header("X-Rate-Limit-Remaining");
     String payload = https.getString();
     deserializeJson(doc, payload);
 
@@ -456,7 +498,7 @@ void drawPlanestoScreen(lv_obj_t *planeScreen)
         buildPlane(plane, planeScreen);
       }
     }
-    Serial.println("Rate limit remaining: " + rateLimitRemaining);
+    Serial.println("Rate limit remaining: " + apiRequestsRemaining);
   }
   whenUpdateScreen = millis() / 1000 + 30;
   pPreviousSelectedPlane = nullptr;
